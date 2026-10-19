@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Boards</title>
+<!--
+  A library page for Magpie exports hosted on GitHub Pages. Drop it in the repo as index.html
+  next to the exported .html files: it asks GitHub which pages are in the repo and reads just the
+  top of each one (name, number of picks, date, first photo), so new uploads appear on their own.
+-->
+<style>
+:root { --paper:#f6f3ed; --card:#fff; --ink:#1e2225; --muted:#6e6a63; --line:#e4ded3; --accent:#2f6f86; color-scheme: light dark; }
+@media (prefers-color-scheme: dark) { :root { --paper:#161719; --card:#222428; --ink:#ece8e1; --muted:#a19d96; --line:#2f3135; --accent:#73b8d0; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header, main, footer { max-width: 1100px; margin: 0 auto; padding-left: 20px; padding-right: 20px; }
+header { padding-top: 48px; }
+h1 { margin: 0; font: 600 40px/1.1 ui-serif, "Iowan Old Style", Georgia, serif; }
+.sub { color: var(--muted); margin: 10px 0 0; font-size: 14px; }
+main { padding-top: 28px; padding-bottom: 64px; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; align-items: start; }
+.board { display: block; color: inherit; text-decoration: none; background: var(--card); border-radius: 16px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.06); transition: transform .18s ease, box-shadow .18s ease; }
+.board:hover, .board:focus-visible { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(0,0,0,.08), 0 10px 26px rgba(0,0,0,.12); outline: none; }
+.board:focus-visible { box-shadow: 0 0 0 2px var(--accent), 0 10px 26px rgba(0,0,0,.12); }
+.cover { aspect-ratio: 4 / 3; background: color-mix(in srgb, var(--ink) 7%, var(--card)); overflow: hidden; }
+.cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.info { padding: 14px 16px 16px; }
+.info h2 { margin: 0; font: 600 19px/1.25 ui-serif, "Iowan Old Style", Georgia, serif; }
+.info .meta { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.info .vision { margin: 8px 0 0; font-size: 13.5px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.loading .cover { animation: pulse 1.4s ease-in-out infinite; }
+.loading .info h2, .loading .info .meta { color: transparent; background: color-mix(in srgb, var(--ink) 8%, transparent); border-radius: 6px; }
+.loading .info h2 { width: 60%; } .loading .info .meta { width: 40%; }
+@keyframes pulse { 50% { opacity: .55; } }
+.message { grid-column: 1 / -1; color: var(--muted); padding: 40px 0; text-align: center; }
+footer { text-align: center; color: var(--muted); font-size: 12px; padding-bottom: 40px; }
+@media (max-width: 520px) { header { padding-top: 32px; } h1 { font-size: 32px; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Boards</h1>
+  <p class="sub" id="sub">&nbsp;</p>
+</header>
+<main id="list" aria-live="polite"></main>
+<footer>Made with Magpie</footer>
+<script>
+(async function () {
+  // Pages sites live at <owner>.github.io/<repo>/. Elsewhere (opened locally), fall back to this repo.
+  const FALLBACK = { owner: 'jkw2lo', repo: 'wedding_board' };
+  const onPages = /\.github\.io$/.test(location.hostname);
+  const owner = onPages ? location.hostname.split('.')[0] : FALLBACK.owner;
+  const repo = onPages ? location.pathname.split('/').filter(Boolean)[0] || `${owner}.github.io` : FALLBACK.repo;
+
+  // "wedding_board" -> "Wedding board"
+  const niceName = repo.replace(/[-_]+/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+  document.title = niceName;
+  document.getElementById('title').textContent = niceName;
+
+  const list = document.getElementById('list');
+  const sub = document.getElementById('sub');
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+  const text = (html) => { const el = document.createElement('div'); el.innerHTML = html; return el.textContent.trim(); };
+
+  let files;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/`);
+    if (!res.ok) throw new Error(res.status === 403 ? 'GitHub is limiting how often this list can be checked. Try again in a few minutes.' : `GitHub said ${res.status}.`);
+    files = (await res.json()).filter((f) => f.type === 'file' && /\.html?$/i.test(f.name) && !/^index\.html?$/i.test(f.name));
+  } catch (err) {
+    list.innerHTML = `<p class="message">Couldn't load the list of boards. ${esc(err.message)}</p>`;
+    return;
+  }
+  if (!files.length) {
+    list.innerHTML = '<p class="message">No boards here yet. Upload an exported page to this repo and it will show up here.</p>';
+    return;
+  }
+  sub.textContent = `${files.length} ${files.length === 1 ? 'board' : 'boards'}`;
+
+  const pageUrl = (f) => (onPages ? `./${encodeURIComponent(f.name)}` : f.download_url);
+  list.innerHTML = files.map((f, i) => `
+    <a class="board loading" id="b${i}" href="${esc(pageUrl(f))}">
+      <div class="cover"></div>
+      <div class="info"><h2>${esc(f.name.replace(/\.html?$/i, ''))}</h2><p class="meta">&nbsp;</p></div>
+    </a>`).join('');
+
+  // Read a page only as far as its header and first photo: the rest is mostly embedded photos.
+  async function readTop(url) {
+    const res = await fetch(url);
+    if (!res.ok || !res.body) throw new Error(res.status);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let html = '';
+    let found = null;
+    while (html.length < 3e6) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      html += decoder.decode(value, { stream: true });
+      const start = html.indexOf('<img src="', html.indexOf('<main'));
+      const end = start === -1 ? -1 : html.indexOf('"', start + 10);
+      if (end !== -1 || html.includes('</main>')) {
+        found = end !== -1 ? html.slice(start + 10, end) : null;
+        break;
+      }
+    }
+    reader.cancel().catch(() => {});
+    const pick = (re) => (html.match(re) || [])[1] || '';
+    return {
+      title: text(pick(/<h1>([\s\S]*?)<\/h1>/)),
+      vision: text(pick(/<p class="vision">([\s\S]*?)<\/p>/)),
+      meta: text(pick(/<p class="sub">([\s\S]*?)<\/p>/)),
+      cover: found,
+    };
+  }
+
+  const boards = files.map((f, i) => ({ f, i, shared: 0 }));
+  let next = 0;
+  async function worker() {
+    while (next < boards.length) {
+      const b = boards[next++];
+      const el = document.getElementById(`b${b.i}`);
+      try {
+        const top = await readTop(pageUrl(b.f));
+        const date = Date.parse((top.meta.match(/shared (.+)$/) || [])[1] || '');
+        b.shared = isNaN(date) ? 0 : date;
+        el.querySelector('.cover').innerHTML = top.cover ? `<img src="${esc(top.cover)}" alt="" />` : '';
+        el.querySelector('.info').innerHTML = `<h2>${esc(top.title || b.f.name.replace(/\.html?$/i, ''))}</h2>${top.meta ? `<p class="meta">${esc(top.meta)}</p>` : ''}${top.vision ? `<p class="vision">${esc(top.vision)}</p>` : ''}`;
+      } catch {
+        el.querySelector('.info .meta').textContent = 'Open board';
+      }
+      el.classList.remove('loading');
+    }
+  }
+  await Promise.all([worker(), worker(), worker()]);
+
+  // Newest shared first; boards without a date keep their name order at the end.
+  for (const b of [...boards].sort((a, z) => z.shared - a.shared)) list.appendChild(document.getElementById(`b${b.i}`));
+})();
+</script>
+</body>
+</html>
